@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Claude Conversations Viewer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f13;
+      --surface: #16161d;
+      --surface2: #1e1e28;
+      --border: #2a2a38;
+      --accent: #7c6af7;
+      --accent2: #f7a26a;
+      --text: #e2e2ed;
+      --text-muted: #6b6b80;
+      --human-color: #7c6af7;
+      --assistant-color: #f7a26a;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75em 1.5em;
+      display: flex;
+      align-items: center;
+      gap: 1.5em;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .header h1 {
+      font-size: 1em;
+      font-weight: 500;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+    .file-area {
+      display: flex;
+      align-items: center;
+      gap: 0.75em;
+      flex: 1;
+    }
+    .file-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.45em 0.9em;
+      font-size: 0.85em;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: border-color 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .file-label:hover { border-color: var(--accent); color: var(--text); }
+    #fileInput { display: none; }
+    #fileNameDisplay {
+      font-size: 0.82em;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 300px;
+    }
+    .stat-badge {
+      margin-left: auto;
+      font-size: 0.78em;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+    }
+
+    /* ===== SEARCH ===== */
+    .search-wrap {
+      padding: 0 0.75em;
+      margin-bottom: 0.75em;
+    }
+    #searchInput {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.4em 0.7em;
+      font-size: 0.82em;
+      color: var(--text);
+      font-family: 'Noto Sans JP', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #searchInput:focus { border-color: var(--accent); }
+    #searchInput::placeholder { color: var(--text-muted); }
+
+    /* ===== LAYOUT ===== */
+    .container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 0.75em 0.75em 0.5em 0.75em;
+      font-size: 0.78em;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #conversationList {
+      list-style: none;
+      overflow-y: auto;
+      flex: 1;
+      padding: 0.5em 0.5em;
+    }
+    #conversationList li {
+      padding: 0.5em 0.75em;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 0.82em;
+      color: var(--text-muted);
+      transition: background 0.15s, color 0.15s;
+      line-height: 1.4;
+    }
+    #conversationList li:hover { background: var(--surface2); color: var(--text); }
+    #conversationList li.selected {
+      background: rgba(124, 106, 247, 0.15);
+      color: var(--accent);
+    }
+    .list-title {
+      display: block;
+      font-weight: 500;
+      color: inherit;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .list-date {
+      display: block;
+      font-size: 0.85em;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 0.1em;
+    }
+
+    /* ===== MAIN ===== */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5em 2em;
+    }
+
+    .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      gap: 0.75em;
+      font-size: 0.9em;
+    }
+    .placeholder svg { opacity: 0.3; }
+
+    /* ===== CONVERSATION ===== */
+    .conversation {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 1.5em;
+      overflow: hidden;
+    }
+    .conv-header {
+      padding: 0.6em 1em;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.75em;
+    }
+    .conv-index {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75em;
+      color: var(--accent);
+      background: rgba(124, 106, 247, 0.12);
+      padding: 0.15em 0.45em;
+      border-radius: 4px;
+    }
+    .conv-title {
+      font-size: 0.88em;
+      font-weight: 500;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .conv-date {
+      font-size: 0.75em;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+    }
+
+    /* ===== HIGHLIGHT ===== */
+    mark {
+      background: rgba(247, 162, 106, 0.35);
+      color: var(--accent2);
+      border-radius: 2px;
+      padding: 0 1px;
+      font-style: normal;
+    }
+
+    /* ===== MESSAGES ===== */
+    .message {
+      padding: 0.85em 1em;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 0.75em;
+    }
+    .message:last-child { border-bottom: none; }
+    .message-role {
+      font-size: 0.72em;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding-top: 0.15em;
+      white-space: nowrap;
+      width: 5.5em;
+      flex-shrink: 0;
+    }
+    .message.human .message-role { color: var(--human-color); }
+    .message.assistant .message-role { color: var(--assistant-color); }
+    .message-body {
+      font-size: 0.875em;
+      line-height: 1.75;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      flex: 1;
+    }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 6px; background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* empty state */
+    .empty-conv { padding: 1em; color: var(--text-muted); font-size: 0.85em; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Claude Conversations Viewer</h1>
+  <div class="file-area">
+    <label class="file-label" for="fileInput">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      conversations.json を選択
+    </label>
+    <input type="file" id="fileInput" accept="application/json">
+    <span id="fileNameDisplay">ファイル未選択</span>
+    <span class="stat-badge" id="statBadge"></span>
+  </div>
+</div>
+
+<div class="container">
+  <div class="sidebar">
+    <div class="sidebar-header">会話一覧</div>
+    <div class="search-wrap" style="padding-top:0.6em;">
+      <input type="text" id="searchInput" placeholder="タイトル・本文で検索…">
+    </div>
+    <ul id="conversationList"></ul>
+  </div>
+  <div class="main" id="main">
+    <div class="placeholder">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <span>conversations.json を読み込んでください</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // -------------------------------------------------------
+  // データ
+  // -------------------------------------------------------
+  let allConversations = [];   // 全会話（フィルタ前）
+  let filtered = [];           // 表示対象
+
+  // -------------------------------------------------------
+  // ユーティリティ
+  // -------------------------------------------------------
+  function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, c =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])
+    );
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString('ja-JP', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
+    } catch { return iso; }
+  }
+
+  // -------------------------------------------------------
+  // メッセージ本文抽出
+  // Claude エクスポートの構造:
+  //   msg.text (string) または
+  //   msg.content (array of {type, text} blocks)
+  // -------------------------------------------------------
+  function extractText(msg) {
+    let parts = [];
+    if (typeof msg.text === 'string' && msg.text.trim()) {
+      parts.push(msg.text.trim());
+    }
+    if (Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block && block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+          parts.push(block.text.trim());
+        }
+      }
+    }
+    return parts.join('\n').trim();
+  }
+
+  // -------------------------------------------------------
+  // 会話が表示対象か判定
+  // -------------------------------------------------------
+  function hasContent(conv) {
+    return Array.isArray(conv.chat_messages) && conv.chat_messages.some(msg => extractText(msg));
+  }
+
+  // -------------------------------------------------------
+  // サイドバー描画
+  // -------------------------------------------------------
+  function renderSidebar(selectedUuid) {
+    const list = document.getElementById('conversationList');
+    list.innerHTML = '';
+    filtered.forEach(conv => {
+      const li = document.createElement('li');
+      if (conv.uuid === selectedUuid) li.classList.add('selected');
+
+      const title = document.createElement('span');
+      title.className = 'list-title';
+      title.textContent = conv.name || '(タイトルなし)';
+
+      const date = document.createElement('span');
+      date.className = 'list-date';
+      date.textContent = formatDate(conv.created_at);
+
+      li.appendChild(title);
+      li.appendChild(date);
+
+      li.addEventListener('click', () => {
+        document.querySelectorAll('#conversationList li').forEach(el => el.classList.remove('selected'));
+        li.classList.add('selected');
+        scrollToConv(conv.uuid);
+      });
+      list.appendChild(li);
+    });
+  }
+
+  // -------------------------------------------------------
+  // ハイライト
+  // クエリが空のときは escapeHTML のみ返す
+  // -------------------------------------------------------
+  function highlightText(text, q) {
+    if (!q) return escapeHTML(text);
+    const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(escapedQ, 'gi');
+    // 生テキストに対してマッチ位置を特定し、各セグメントをescapeHTMLしてから結合
+    let result = '';
+    let lastIndex = 0;
+    let match;
+    while ((match = re.exec(text)) !== null) {
+      result += escapeHTML(text.slice(lastIndex, match.index));
+      result += '<mark>' + escapeHTML(match[0]) + '</mark>';
+      lastIndex = match.index + match[0].length;
+      if (match[0].length === 0) { re.lastIndex++; } // 無限ループ防止
+    }
+    result += escapeHTML(text.slice(lastIndex));
+    return result;
+  }
+
+  // -------------------------------------------------------
+  // メイン描画
+  // -------------------------------------------------------
+  function renderMain(q) {
+    const main = document.getElementById('main');
+    if (filtered.length === 0) {
+      main.innerHTML = '<div class="placeholder"><span>該当する会話がありません</span></div>';
+      return;
+    }
+
+    let html = '';
+    filtered.forEach((conv, i) => {
+      let messagesHtml = '';
+      conv.chat_messages.forEach(msg => {
+        const text = extractText(msg);
+        if (!text) return;
+        const role = (msg.sender === 'assistant') ? 'assistant' : 'human';
+        const roleLabel = role === 'assistant' ? 'Claude' : 'Human';
+        // 本文にハイライトを適用（pre-wrapなので改行は<br>に変換しない、white-space:pre-wrapに任せる）
+        const bodyHtml = highlightText(text, q);
+        messagesHtml += `
+          <div class="message ${escapeHTML(role)}">
+            <span class="message-role">${roleLabel}</span>
+            <div class="message-body">${bodyHtml}</div>
+          </div>`;
+      });
+      if (!messagesHtml) return;
+
+      const convId = 'conv-' + conv.uuid;
+      const titleHtml = highlightText(conv.name || '(タイトルなし)', q);
+      html += `
+        <div class="conversation" id="${escapeHTML(convId)}">
+          <div class="conv-header">
+            <span class="conv-index">#${i + 1}</span>
+            <span class="conv-title">${titleHtml}</span>
+            <span class="conv-date">${escapeHTML(formatDate(conv.created_at))}</span>
+          </div>
+          ${messagesHtml}
+        </div>`;
+    });
+
+    main.innerHTML = html || '<div class="placeholder"><span>表示できるメッセージがありません</span></div>';
+  }
+
+  function scrollToConv(uuid) {
+    const el = document.getElementById('conv-' + uuid);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // -------------------------------------------------------
+  // 会話がクエリにマッチするか（タイトル or 本文）
+  // -------------------------------------------------------
+  function convMatches(conv, q) {
+    if (!q) return true;
+    if ((conv.name || '').toLowerCase().includes(q)) return true;
+    if (!Array.isArray(conv.chat_messages)) return false;
+    return conv.chat_messages.some(msg => extractText(msg).toLowerCase().includes(q));
+  }
+
+  // -------------------------------------------------------
+  // 検索フィルタ
+  // -------------------------------------------------------
+  document.getElementById('searchInput').addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    filtered = allConversations.filter(c => convMatches(c, q));
+    document.getElementById('statBadge').textContent =
+      q
+        ? `${filtered.length} 件ヒット / 全 ${allConversations.length} 件`
+        : `${allConversations.length} 件`;
+    renderSidebar();
+    renderMain(q);
+  });
+
+  // -------------------------------------------------------
+  // ファイル読み込み（change イベントは1つだけ登録）
+  // -------------------------------------------------------
+  document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    document.getElementById('fileNameDisplay').textContent = file.name;
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      let json;
+      try {
+        json = JSON.parse(event.target.result);
+      } catch (err) {
+        document.getElementById('main').innerHTML =
+          `<div class="placeholder"><span>JSON 解析エラー: ${escapeHTML(String(err))}</span></div>`;
+        return;
+      }
+
+      // conversations.json は配列
+      if (!Array.isArray(json)) {
+        document.getElementById('main').innerHTML =
+          '<div class="placeholder"><span>データ構造が不正です（配列を期待）</span></div>';
+        return;
+      }
+
+      allConversations = json.filter(hasContent);
+      filtered = allConversations.slice();
+
+      document.getElementById('statBadge').textContent =
+        `${allConversations.length} 件`;
+
+      renderSidebar();
+      renderMain('');
+    };
+    reader.readAsText(file);
+  });
+</script>
+</body>
+</html>
